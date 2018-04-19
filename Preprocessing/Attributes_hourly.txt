@@ -1,0 +1,45 @@
+attributes in constructed df_hourly_with_pair:
+
+(each row is one day)
+1.
+(1)
+BTC-low: lowest price that appeared on that day
+BTC-high: highest price that appeared on that day
+BTC-mean: average of 'per minute start prices' on that day
+BTC-weighted-mean: weighted average of 'per minute start prices' on that day. weights are volumns
+BTC-volumn: total volumn on that day.
+BTC-percent-change: percentage change of BTC-weighted-mean
+(BTC-supply, BTC-market-cap data not complete from json files)
+(2)
+ETH-low
+ETH-high
+ETH-mean
+ETH-weighted-mean
+ETH-volumn
+ETH-percent-change
+(3)
+LTC-low
+LTC-high
+LTC-mean
+LTC-weighted-mean
+LTC-volumn
+LTC-percent-change
+
+2.pair data:
+currency pair a_b means a is base currency and b is quote currency.
+All the price here is the relative price based on quote qurrency.
+(1)
+BTC_ETH_high: highest relative price of ETH that appeared on that hour	
+BTC_ETH_low: lowest relative price of ETH that appeared on that hour
+BTC_ETH_volume:	total volume of ETH in terms of BTC on that hour
+BTC_ETH_mean: average of 'per minute close prices' on that hour
+BTC_ETH_quoteVolume:  total volume of ETH in terms of ETH	
+btc_eth_weighted_mean: weighted average of 'per minute close prices' on that hour. 
+weights are BTC_ETH_volume above.
+(2)
+BTC_LTC_high	
+BTC_LTC_low	
+BTC_LTC_volume	
+BTC_LTC_mean	
+BTC_LTC_quoteVolume	
+btc_LTC_weighted_mean
