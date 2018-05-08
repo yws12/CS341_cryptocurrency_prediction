@@ -33,6 +33,9 @@ class Environment:
     def reset(self):
         self.current_index = self.df.index[0]
         
+    def set_current_time(self, current_time):
+        self.current_index = current_time
+        
     def getCurrentPrice(self):
         return self.df.loc[self.current_index, 'USDT_BTC_open'] # is this the correct 'current price'??
 
