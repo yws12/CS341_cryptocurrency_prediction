@@ -40,6 +40,44 @@ class Environment:
         return self.df.loc[self.current_index, 'USDT_BTC_open'] # is this the correct 'current price'??
 
     
+class PredictEnvironment:
+    def __init__(self):
+        dir_path = '../Data/'
+        df = pd.read_pickle(dir_path+'df_hourly_BTC_with_labels.pickle')
+        predict_df = pd.read_pickle(dir_path+'df_hourly_BTC_with_6_test_prediction.pickle')
+        self.df = df.dropna()
+        #  start from test time.
+        self.predict_df = predict_df.dropna()
+        self.current_index = self.df.index[0]
+        self.start_index = self.df.index[0]
+        self.time_delta = self.df.index[1] - self.df.index[0]
+
+
+    def getState(self):
+        return self.df.loc[self.current_index,['USDT_BTC_high', 'USDT_BTC_low', 'USDT_BTC_close', 'USDT_BTC_open', \
+           'USDT_BTC_volume', 'USDT_BTC_quoteVolume', 'USDT_BTC_weighted_mean', \
+           'USDT_BTC_volatility', 'USDT_BTC_pctChange']]
+
+    def getPredict(self):
+        next_index = self.current_index + self.time_delta
+        return self.predict_df.loc[next_index,['open_pctChange_predict','close_pctChange_predict',\
+        'high_pctChange_predict','low_pctChange_predict','mean_pctChange_predict',\
+        'volatility_predict']]
+
+    def step(self):
+        self.current_index += self.time_delta
+        return self.current_index == self.df.index[-2], self.getState(), self.getPredict()
+        
+    def reset(self):
+        self.current_index = self.df.index[0]
+        
+    def set_current_time(self, current_time):
+        self.current_index = current_time
+        
+    def getCurrentPrice(self):
+        return self.df.loc[self.current_index, 'USDT_BTC_open'] # is this the correct 'current price'??
+
+    
 class Portfolio:
     def __init__(self, cash_supply):
         self.portfolio_coin = 0.0

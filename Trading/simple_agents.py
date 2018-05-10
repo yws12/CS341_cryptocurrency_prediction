@@ -29,3 +29,15 @@ print bba.act([0, 1])
 #         if cross_lower_band:
 #             return Action.BUY
 #         return Action.HOLD
+
+
+
+class DumbAgent:
+	def __init__(self,Action):
+		self.Action = Action
+	def get_action_by_predict(self,state,next_state):
+		if (next_state['mean_pctChange_predict'] >= 4):
+			return self.Action.BUY
+		if (next_state['mean_pctChange_predict'] <=2):
+			return self.Action.SELL
+		return self.Action.HOLD
