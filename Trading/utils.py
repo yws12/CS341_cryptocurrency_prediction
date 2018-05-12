@@ -79,11 +79,11 @@ class PredictEnvironment:
 
     
 class Portfolio:
-    def __init__(self, cash_supply):
+    def __init__(self, cash_supply, cash_limit_per_order = None):
         self.portfolio_coin = 0.0
         self.portfolio_cash = cash_supply
         self.starting_cash = cash_supply
-        self.num_coins_per_order = 10.0
+        self.cash_limit_per_order = cash_limit_per_order
         self.states = state_list
         
         ### Mapping states to their names, do we need this?
@@ -143,7 +143,10 @@ class Portfolio:
         
         buy_price = current_price * (1 + spread)     # ??????????
         
-        coin_to_buy = min(self.num_coins_per_order, np.floor(self.portfolio_cash / current_price))
+        if self.cash_limit_per_order is None:
+            coin_to_buy = self.portfolio_cash / buy_price
+        else:
+            coin_to_buy = min(self.cash_limit_per_order, self.portfolio_cash) / buy_price
         
         if verbose:
             print("Before buying: coin:%.3f, cash:%.3f, buy price:%.3f" %(
@@ -165,7 +168,10 @@ class Portfolio:
         
         sell_price = current_price * (1 - spread)    # ??????????
         
-        coin_to_sell = min(self.num_coins_per_order, self.portfolio_coin)
+        if self.cash_limit_per_order is None:
+            coin_to_sell = self.portfolio_coin
+        else:
+            coin_to_sell = min(self.cash_limit_per_order / sell_price, self.portfolio_coin)
         
         if verbose:
             print("Before selling: coin:%.3f, cash:%.3f, sell price:%.3f" %(
