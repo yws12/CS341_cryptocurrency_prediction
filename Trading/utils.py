@@ -5,6 +5,7 @@ state_list = ["coin", "cash", "total_value", "is_holding_coin", "return_since_en
 
 # spread = 0.68 / 100 # BTC spread
 spread = 0 # should fix this later
+fraction_trading_fee = 0.25 / 100
 
 from enum import Enum
 class Action(Enum):
@@ -144,16 +145,17 @@ class Portfolio:
         buy_price = current_price * (1 + spread)     # ??????????
         
         if self.cash_limit_per_order is None:
-            coin_to_buy = self.portfolio_cash / buy_price
+            coin_to_buy = self.portfolio_cash * 1 / (1 + fraction_trading_fee) / buy_price
         else:
-            coin_to_buy = min(self.cash_limit_per_order, self.portfolio_cash) / buy_price
+            coin_to_buy = min(self.cash_limit_per_order * 1 / (1 + fraction_trading_fee), \
+                              self.portfolio_cash * 1 / (1 + fraction_trading_fee)) / buy_price
         
         if verbose:
             print("Before buying: coin:%.3f, cash:%.3f, buy price:%.3f" %(
                 self.portfolio_coin, self.portfolio_cash, buy_price))
             
         self.portfolio_coin += coin_to_buy
-        self.portfolio_cash -= coin_to_buy * buy_price
+        self.portfolio_cash -= coin_to_buy * buy_price * (1 + fraction_trading_fee)
 #         self.cash_used += coin_to_buy * buy_price
         
         if verbose:
@@ -178,7 +180,7 @@ class Portfolio:
                 self.portfolio_coin, self.portfolio_cash, sell_price))
         
         self.portfolio_coin -= coin_to_sell
-        self.portfolio_cash += coin_to_sell * sell_price
+        self.portfolio_cash += coin_to_sell * sell_price * (1 - fraction_trading_fee)
         
         if verbose:
             print("After selling: coin sold:%.3f, coin now:%.3f, cash now:%.3f" %(
