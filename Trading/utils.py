@@ -19,16 +19,16 @@ def give_me_three_plots(to_plot, start_ind=0, end_ind=100, step=1):
         else:
             action_val.append(1)
             
-    width=0.35
     coin_val = np.array([i for i in coin]) * np.array([i for i in prices])
     cash_val = np.array([i for i in cash])
     price_val = [i for i in prices]
     
     ind = np.arange(start_ind, end_ind, step)
+    width= 500 / len(ind)
 
     plt.figure(figsize = (20, 10))
     plt.subplot(221)
-    plt.plot([price_val[i] for i in ind])
+    plt.plot(ind, [price_val[i] for i in ind])
     plt.subplot(222)
     coin_val_used = [coin_val[i] for i in ind]
     p1 = plt.bar(ind, coin_val_used, width)
@@ -50,16 +50,16 @@ def give_me_one_plot(to_plot, start_ind=0, end_ind=100, step=1):
         else:
             action_val.append(1)
             
-    width=0.35
     coin_val = np.array([i for i in coin]) * np.array([i for i in prices])
     cash_val = np.array([i for i in cash])
     price_val = [i for i in prices]
     
     ind = np.arange(start_ind, end_ind, step)
+    width= 500 / len(ind)
 
     fig, ax1 = plt.subplots(figsize = (20, 10))
 
-    ax1.plot([price_val[i] for i in ind])
+    ax1.plot(ind, [price_val[i] for i in ind])
     
     ax2 = ax1.twinx()
 
