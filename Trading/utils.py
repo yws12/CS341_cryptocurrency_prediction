@@ -1,11 +1,81 @@
 import pandas as pd
 import numpy as np
+from matplotlib import pyplot as plt
 
 state_list = ["coin", "cash", "total_value", "is_holding_coin", "return_since_entry"] 
 
 # spread = 0.68 / 100 # BTC spread
 spread = 0 # should fix this later
 fraction_trading_fee = 0.25 / 100
+
+def give_me_three_plots(to_plot, start_ind=0, end_ind=100, step=1):
+    prices, coin, cash, action = zip(*to_plot)
+    action_val = []
+    for i in action:
+        if i == Action.BUY:
+            action_val.append(3)
+        elif i == Action.HOLD:
+            action_val.append(2)
+        else:
+            action_val.append(1)
+            
+    width=0.35
+    coin_val = np.array([i for i in coin]) * np.array([i for i in prices])
+    cash_val = np.array([i for i in cash])
+    price_val = [i for i in prices]
+    
+    ind = np.arange(start_ind, end_ind, step)
+
+    plt.figure(figsize = (20, 10))
+    plt.subplot(221)
+    plt.plot([price_val[i] for i in ind])
+    plt.subplot(222)
+    coin_val_used = [coin_val[i] for i in ind]
+    p1 = plt.bar(ind, coin_val_used, width)
+    cash_val_used = [cash_val[i] for i in ind]
+    p2 = plt.bar(ind, cash_val_used, width,
+                 bottom=coin_val_used)
+    plt.legend((p1[0], p2[0]), ('Coin value', 'Cash value'))
+    plt.subplot(223)
+    plt.scatter(x=ind, y=[action_val[i] for i in ind])
+    
+def give_me_one_plot(to_plot, start_ind=0, end_ind=100, step=1):
+    prices, coin, cash, action = zip(*to_plot)
+    action_val = []
+    for i in action:
+        if i == Action.BUY:
+            action_val.append(3)
+        elif i == Action.HOLD:
+            action_val.append(2)
+        else:
+            action_val.append(1)
+            
+    width=0.35
+    coin_val = np.array([i for i in coin]) * np.array([i for i in prices])
+    cash_val = np.array([i for i in cash])
+    price_val = [i for i in prices]
+    
+    ind = np.arange(start_ind, end_ind, step)
+
+    fig, ax1 = plt.subplots(figsize = (20, 10))
+
+    ax1.plot([price_val[i] for i in ind])
+    
+    ax2 = ax1.twinx()
+
+    coin_val_used = [coin_val[i] for i in ind]
+    p1 = ax2.bar(ind, coin_val_used, width)
+    cash_val_used = [cash_val[i] for i in ind]
+    p2 = ax2.bar(ind, cash_val_used, width,
+                 bottom=coin_val_used)
+    ax2.legend((p1[0], p2[0]), ('Coin value', 'Cash value'))
+
+    ax3 = ax1.twinx()
+    ax3.scatter(x=ind, y=[action_val[i] for i in ind], c='purple', marker='D', linewidth=9)
+    ax3.set_ylim(0.5,3.5)
+
+
+    
 
 from enum import Enum
 class Action(Enum):
