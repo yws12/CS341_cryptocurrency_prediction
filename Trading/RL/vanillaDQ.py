@@ -211,9 +211,11 @@ class VanillaDQAgent:
     ### start = datetime.datetime(2018,1,1,0)
     ### agent.test(start_time = start)
     
-    def test(self, start_time, end_time=None, epsilon = None, verbose=True):
+    def test(self, start_time, end_time=None, epsilon = None, verbose=True, print_freq='daily'):
         if epsilon is not None:
             self.epsilon = epsilon
+        else:
+            self.epsilon = 0 # set to 0, no randomness allowed 
         
         self.env.reset()
         self.env.set_current_time(start_time)
@@ -231,10 +233,27 @@ class VanillaDQAgent:
         n_days = (end_time - start_time) // (self.env.time_delta * 24)
         print('Testing from ', start_time, ' to', end_time, ': ', '~', n_days, 'days\n')
     
+        start_day = start_time.day
+        verbose_g = verbose
+    
         while (True):
             
             if verbose:
-                print('Current time:', self.env.current_index)
+                if print_freq == 'hourly':
+                    print('Current time:', self.env.current_index)
+                    verbose = True
+                if print_freq == 'daily':
+                    if self.env.current_index.hour == 0:
+                        print('Current time:', self.env.current_index)
+                        verbose = True
+                    else:
+                        verbose = False
+                elif print_freq == 'weekly': 
+                    if self.env.current_index.day in np.roll((np.arange(28)+1), 28-start_day+1)[::7] and self.env.current_index.hour == 0:
+                        print('Current time:', self.env.current_index)
+                        verbose = True
+                    else:
+                        verbose = False
             
             action = self.__act(state)
             action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose)
@@ -251,10 +270,13 @@ class VanillaDQAgent:
             
             self.test_actions.append(action.value)
             
+            verbose = verbose_g
+            
             if isDone:
                 break
         
         ts = self.env.df.ix[start_time:end_time].index[:-1]
+        #ts = self.env.df.ix[start_time:end_time].index
         self.test_cum_returns = pd.Series(self.test_cum_returns, index=ts)
         self.test_portfolio_values = pd.Series(self.test_portfolio_values, index=ts)
         self.test_actions = pd.Series(self.test_actions, index=ts)
