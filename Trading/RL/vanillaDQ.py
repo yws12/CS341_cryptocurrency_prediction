@@ -211,7 +211,7 @@ class VanillaDQAgent:
     ### start = datetime.datetime(2018,1,1,0)
     ### agent.test(start_time = start)
     
-    def test(self, start_time, end_time=None, epsilon = None, verbose=True, print_freq='daily'):
+    def test(self, start_time, end_time=None, epsilon=None, verbose=True, print_freq='daily'):
         if epsilon is not None:
             self.epsilon = epsilon
         else:
@@ -227,8 +227,10 @@ class VanillaDQAgent:
         self.test_portfolio_values = []
         self.test_actions = []
         
-        if end_time is None:
-                end_time = self.env.end_index
+        if end_time is None or end_time >= self.env.end_index:
+            end_time = self.env.end_index - self.env.time_delta
+        
+        print(end_time)
         
         n_days = (end_time - start_time) // (self.env.time_delta * 24)
         print('Testing from ', start_time, ' to', end_time, ': ', '~', n_days, 'days\n')
@@ -275,8 +277,8 @@ class VanillaDQAgent:
             if isDone:
                 break
         
-        ts = self.env.df.ix[start_time:end_time].index[:-1]
-        #ts = self.env.df.ix[start_time:end_time].index
+        #ts = self.env.df.ix[start_time:end_time].index[:-1]
+        ts = self.env.df.ix[start_time:end_time].index
         self.test_cum_returns = pd.Series(self.test_cum_returns, index=ts)
         self.test_portfolio_values = pd.Series(self.test_portfolio_values, index=ts)
         self.test_actions = pd.Series(self.test_actions, index=ts)
