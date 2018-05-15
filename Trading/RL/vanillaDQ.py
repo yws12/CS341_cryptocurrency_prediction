@@ -230,8 +230,6 @@ class VanillaDQAgent:
         if end_time is None or end_time >= self.env.end_index:
             end_time = self.env.end_index - self.env.time_delta
         
-        print(end_time)
-        
         n_days = (end_time - start_time) // (self.env.time_delta * 24)
         print('Testing from ', start_time, ' to', end_time, ': ', '~', n_days, 'days\n')
     
@@ -277,7 +275,6 @@ class VanillaDQAgent:
             if isDone:
                 break
         
-        #ts = self.env.df.ix[start_time:end_time].index[:-1]
         ts = self.env.df.ix[start_time:end_time].index
         self.test_cum_returns = pd.Series(self.test_cum_returns, index=ts)
         self.test_portfolio_values = pd.Series(self.test_portfolio_values, index=ts)
