@@ -30,6 +30,12 @@ print bba.act([0, 1])
 #             return Action.BUY
 #         return Action.HOLD
 
+class AlwaysBuyAgent:
+    def __init__(self, Action):
+        self.Action = Action
+        
+    def get_action(self, state=None):
+        return self.Action.BUY
 
 
 class DumbAgent:
