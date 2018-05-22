@@ -95,6 +95,7 @@ class MintDQNAgent:
                  coin_name='BTC', num_coins_per_order=1.0, recent_k = 0,
                  external_states = external_state_list,
                  internal_states = internal_state_list, verbose=False):
+        self.max_mem_len = 2000
         self.memory = deque(maxlen=2000)
         self.batch_size = 1800
         self.gamma = gamma
@@ -120,6 +121,8 @@ class MintDQNAgent:
         self.test_portfolio_values = []
         self.test_actions = []
         self.seq_len = input_seq_len
+        
+        self.state_mean = None
      
     def plot_external_states(self):
         self.env.plot(self.external_states)
@@ -129,7 +132,7 @@ class MintDQNAgent:
         if np.random.rand() < self.epsilon:
             return random.choice(list(Action))
         act_values = self.model.predict(state)
-#         print(state, act_values)
+        print(act_values)
         return Action(np.argmax(act_values[0]))
         
     def __remember(self, state, action, reward, next_state, isDone):
@@ -154,23 +157,19 @@ class MintDQNAgent:
         
     def __replay(self, batch_size):
         # key: some delay here
-        self.memory = np.array(self.memory)
-        state_sum = 0
-        for list_of_state in self.memory[:,0]:
-            state_sum += np.array(list_of_state)
-        self.state_mean = state_sum / len(self.memory)
             
 #         print(self.memory[:,0])
 #         print('mean state:', np.mean(self.memory[:,0]))
         
+        self.memory = np.array(self.memory)
         self.memory[:,2] = np.roll(self.memory[:,2], -9, axis=0)
-        self.memory = list(self.memory[:-9,:])
+        self.memory = deque(self.memory[:-9,:], maxlen=self.max_mem_len)
         print(len(self.memory))
         minibatch = random.sample(self.memory, self.batch_size)
         
         for state, action, reward, next_state, isDone in minibatch:
-            state -= self.state_mean
-            next_state -= self.state_mean
+#             state -= self.state_mean
+#             next_state -= self.state_mean
 #             print('state',state)
             target = self.model.predict(state)
 #             print('target predict before action:', target)
@@ -226,12 +225,19 @@ class MintDQNAgent:
                     
                 value_before_action = self.portfolio.getCurrentValue(self.env.getCurrentPrice())
                 
-                action = self.__act(state)
+                if self.state_mean is not None:
+                    action = self.__act(state - self.state_mean)
+                else:
+                    action = self.__act(state)
                 isDone, next_state = self.env.step(end_time) # order changed
                 action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose)
                 
                 next_state = self.env.getStatesSequence() # mint
                 next_state = next_state + self.portfolio.getStates()
+                
+                if self.state_mean is not None:
+                    next_state -= self.state_mean
+                    
 #                 reward = self.env.getReward(action) # this was used in vanilla
                 reward = (self.portfolio.getCurrentValue(self.env.getCurrentPrice()) / value_before_action - 1) * 100
                 if verbose:
@@ -240,6 +246,14 @@ class MintDQNAgent:
                 
                 self.__remember(state, action, reward, next_state, isDone)
                 state = next_state
+                
+                if i == 0:
+                    # estimate state mean
+                    memory = np.array(self.memory)
+                    state_sum = 0
+                    for list_of_state in memory[:,0]:
+                        state_sum += np.array(list_of_state)
+                    self.state_mean = state_sum / len(memory)
                 
                 if isDone:
                     self.__update_target_model()
