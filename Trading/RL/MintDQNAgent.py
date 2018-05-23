@@ -2,7 +2,7 @@
 Mint Agent, ycli
 [Requires utils_v2.py]
 Based on Vanilla DQ Agent. Changes include:
-1. Change neural network to 1 layer to overcome vanishing gradients. Also changed stddev in initialization.
+1. Change neural network to 2 layers to overcome vanishing gradients. Also changed stddev in initialization.
 2. Require 'cash_supply' for __init__()
 3. Include 'seq_len' as an argument for __init__(). 'seq_len' is the number of hours the agent sees before making a decision. Defaults to 10.
 4. Change self.batch_size from 32 to 1800.
@@ -13,9 +13,8 @@ Based on Vanilla DQ Agent. Changes include:
 9. In train(), change reward definition to the percent change of portfolio value. This, with the rolling mentioned above, makes the reward the relative change in portfolio value of the 10th hour in the future with respect to the 9th hour in the future. (This is still   not a natural reward function, right?)
 10. In test(), the model is not automatically loaded. Instead, load the model explicitly in your ipynb.
 11. In train() and test(), change the order of env.step() and portfolio.apply_action(). Step first.
-
-Problem:
-self.memory should be a deque. Why does it keep growing in length?
+12. Changed keras implementation to tensorflow.
+13. Changed activation to leaky_relu !!!!!
 '''
 
 from importlib import reload
@@ -46,21 +45,22 @@ class QValue_NN:
         return K.mean(K.sqrt(1+K.square(error))-1, axis=-1)
 
     def __build_model(self): # maybe fix random seed here
-        with tf.variable_scope("Model", initializer=tf.contrib.layers.xavier_initializer()):
+        
             self.X = tf.placeholder(tf.float32, [None, self._state_size])
             self.y = tf.placeholder(tf.float32, [None, self._action_size])
-            self.preds = tf.layers.dense(self.X, self._action_size, activation=tf.nn.elu)  # first FC
+            a1 = tf.layers.dense(self.X, self._action_size, activation=tf.nn.leaky_relu)  # first FC
+            self.preds = tf.layers.dense(a1, self._action_size, activation=tf.nn.leaky_relu)  # second FC
             self.loss = tf.nn.l2_loss(self.preds - self.y)
             optimizer = tf.train.AdamOptimizer(learning_rate=0.01) 
             self.train_op = optimizer.minimize(self.loss)
 
     def train(self, session, state, qvalues):
         state_reshape = np.reshape(state, [1, len(state)])
-        session.run(self.train_op, feed_dict={self.X: state, self.y:qvalues})
+        session.run(self.train_op, feed_dict={self.X: state_reshape, self.y:qvalues})
 
     def predict(self, session, state):
         state_reshape = np.reshape(state, [1, len(state)])
-        return session.run(self.preds, feed_dict={self.X: state})
+        return session.run(self.preds, feed_dict={self.X: state_reshape})
     
 #     def set_weights(self, model_weights):
 #         self._model.set_weights(model_weights)
@@ -105,8 +105,12 @@ class MintDQNAgent:
                                    verbose=verbose, final_price=self.env.getFinalPrice())
         # NN model
         _state_size = self.env.getStateSpaceSize()*input_seq_len + self.portfolio.getStateSpaceSize()
-        self.model = QValue_NN(_state_size, self.portfolio.getActionSpaceSize(), num_neutron)
-        self.target_model = QValue_NN(_state_size, self.portfolio.getActionSpaceSize(), num_neutron)
+        tf.reset_default_graph()
+        with tf.variable_scope("model", initializer=tf.contrib.layers.xavier_initializer()) as scope:
+            self.model = QValue_NN(_state_size, self.portfolio.getActionSpaceSize(), num_neutron)
+            self.old_vars = {v.name.split('model/')[-1] : v for v in tf.trainable_variables() if v.name.startswith(scope.name + "/")}
+        with tf.variable_scope("target_model", initializer=tf.contrib.layers.xavier_initializer()):
+            self.target_model = QValue_NN(_state_size, self.portfolio.getActionSpaceSize(), num_neutron)
         
         self.train_cum_returns = []
         
@@ -121,21 +125,27 @@ class MintDQNAgent:
         self.env.plot(self.external_states)
     
     
-    def __act(self, state):
+    def __act(self, session, state):
         if np.random.rand() < self.epsilon:
             return random.choice(list(Action))
-        act_values = self.model.predict(state)
+        act_values = self.model.predict(session, state)
         print(act_values)
-        if np.array_equal(act_values, np.array([[0.0, 0.0, 0.0]])):
-            print("what???????????????????????????????????????")
-            print(state)
+#         if np.array_equal(act_values, np.array([[-1.0, -1.0, -1.0]])):
+#             print("what???????????????????????????????????????")
+#             print(state)
         return Action(np.argmax(act_values[0]))
         
     def __remember(self, state, action, reward, next_state, isDone):
         self.memory.append((state, action, reward, next_state, isDone))
         
-    def __update_target_model(self):
-        self.target_model._model.set_weights(self.model._model.get_weights())
+    def __update_target_model(self, sess):
+        #         self.target_model._model.set_weights(self.model._model.get_weights())
+        with tf.variable_scope("target_model", initializer=tf.contrib.layers.xavier_initializer()) as scope:
+#             for v in tf.trainable_variables():
+#                 print(v.name)
+            assignments = [v.assign(self.old_vars[v.name.split('model/')[-1]]) \
+                           for v in tf.trainable_variables() if v.name.startswith(scope.name + "/")]
+            sess.run(assignments)
 
     def print_my_memory(self):
         mem = list(self.memory)
@@ -167,13 +177,13 @@ class MintDQNAgent:
 #             state -= self.state_mean
 #             next_state -= self.state_mean
 #             print('state',state)
-            target = self.model.predict(state)
+            target = self.model.predict(session, state)
 #             print('target predict before action:', target)
             if isDone:
                 target[0][action.value] = reward
             else:
-                a = self.model.predict(next_state)[0]
-                t = self.target_model.predict(next_state)[0]
+                a = self.model.predict(session, next_state)[0]
+                t = self.target_model.predict(session, next_state)[0]
                 
                 # Bellman Equation
                 target[0][action.value] = reward + self.gamma * t[np.argmax(a)]
@@ -196,6 +206,7 @@ class MintDQNAgent:
     ### agent.train(end_time = end)
     
     def train(self, session, end_time, num_episodes=100, start_time=None, verbose=True):
+        session.run(tf.global_variables_initializer())
         self.cum_returns = []
         
         if start_time is None:
@@ -222,9 +233,9 @@ class MintDQNAgent:
                 value_before_action = self.portfolio.getCurrentValue(self.env.getCurrentPrice())
                 
                 if self.state_mean is not None:
-                    action = self.__act(state - self.state_mean)
+                    action = self.__act(session, state - self.state_mean)
                 else:
-                    action = self.__act(state)
+                    action = self.__act(session, state)
                 isDone, next_state = self.env.step(end_time) # order changed
                 action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose)
                 
@@ -252,7 +263,7 @@ class MintDQNAgent:
                     self.state_mean = state_sum / len(memory)
                 
                 if isDone:
-                    self.__update_target_model()
+                    self.__update_target_model(session)
                     
                     cum_return = self.portfolio.getReturnsPercent(self.env.getCurrentPrice())
                     self.train_cum_returns.append(cum_return)
@@ -276,7 +287,7 @@ class MintDQNAgent:
     ### start = datetime.datetime(2018,1,1,0)
     ### agent.test(start_time = start)
     
-    def test(self, start_time, end_time=None, epsilon=None, verbose=True, print_freq='daily'):
+    def test(self, session, start_time, end_time=None, epsilon=None, verbose=True, print_freq='daily'):
         if epsilon is not None:
             self.epsilon = epsilon
         else:
@@ -321,7 +332,7 @@ class MintDQNAgent:
                     else:
                         verbose = False
             
-            action = self.__act(state)
+            action = self.__act(session, state)
             isDone, next_state = self.env.step(end_time) # order changed
             action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose)
             
