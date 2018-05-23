@@ -23,12 +23,14 @@ import utils_v2
 reload(utils_v2)
 from utils_v2 import *
 
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.optimizers import Adam
-from keras import backend as K
-from keras import initializers
-from keras.models import load_model
+import tensorflow as tf
+
+# from keras.models import Sequential
+# from keras.layers import Dense
+# from keras.optimizers import Adam
+# from keras import backend as K
+# from keras import initializers
+# from keras.models import load_model
 
 # Neural Network for the Q value approximation
 class QValue_NN:
@@ -36,50 +38,41 @@ class QValue_NN:
         self._state_size = state_size
         self._action_size = action_size
         self._units = units
-        self._model = self.__build_model()
+        self.__build_model()
         
     def __huber_loss(self, target, prediction):
         # sqrt(1+error^2)-1
         error = prediction - target
         return K.mean(K.sqrt(1+K.square(error))-1, axis=-1)
 
-    def __build_model(self):
-        model = Sequential()
-        model.add(Dense(self._action_size, input_dim=self._state_size, activation='relu',
-                       kernel_initializer=initializers.RandomNormal(stddev=0.01, seed=3456),
-                       bias_initializer='zeros'))
-#         model.add(Dense(self._units, input_dim=self._state_size, activation='relu',
-#                        kernel_initializer=initializers.RandomNormal(stddev=0.01, seed=3456),
-#                        bias_initializer='zeros'))
-#         model.add(Dense(self._units, activation='relu',
-#                        kernel_initializer=initializers.RandomNormal(stddev=0.01, seed=3456),
-#                        bias_initializer='zeros'))
-#         model.add(Dense(self._action_size, activation='linear',
-#                        kernel_initializer=initializers.RandomNormal(stddev=0.01, seed=3456),
-#                        bias_initializer='zeros'))
-        model.compile(loss=self.__huber_loss, optimizer="adam")
-        return model
+    def __build_model(self): # maybe fix random seed here
+        with tf.variable_scope("Model", initializer=tf.contrib.layers.xavier_initializer()):
+            self.X = tf.placeholder(tf.float32, [None, self._state_size])
+            self.y = tf.placeholder(tf.float32, [None, self._action_size])
+            self.preds = tf.layers.dense(self.X, self._action_size, activation=tf.nn.elu)  # first FC
+            self.loss = tf.nn.l2_loss(self.preds - self.y)
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.01) 
+            self.train_op = optimizer.minimize(self.loss)
 
-    def train(self, state, qvalues):
-        
+    def train(self, session, state, qvalues):
         state_reshape = np.reshape(state, [1, len(state)])
-        self._model.fit(state_reshape, qvalues, epochs=1, verbose=0)
+        session.run(self.train_op, feed_dict={self.X: state, self.y:qvalues})
 
-    def predict(self, state):
+    def predict(self, session, state):
         state_reshape = np.reshape(state, [1, len(state)])
-        return self._model.predict(state_reshape)
+        return session.run(self.preds, feed_dict={self.X: state})
     
-    def set_weights(self, model_weights):
-        self._model.set_weights(model_weights)
+#     def set_weights(self, model_weights):
+#         self._model.set_weights(model_weights)
         
-    def get_weights(self):
-        return self._model.get_weights()
+#     def get_weights(self):
+#         return self._model.get_weights()
     
-    def save(self, path):
-        self._model.save_weights(path)
+#     def save(self, path):
+#         self._model.save_weights(path)
         
-    def load(self, path):
-        self._model.load_weights(path)
+#     def load(self, path):
+#         self._model.load_weights(path)
         
 
 import random
@@ -133,6 +126,9 @@ class MintDQNAgent:
             return random.choice(list(Action))
         act_values = self.model.predict(state)
         print(act_values)
+        if np.array_equal(act_values, np.array([[0.0, 0.0, 0.0]])):
+            print("what???????????????????????????????????????")
+            print(state)
         return Action(np.argmax(act_values[0]))
         
     def __remember(self, state, action, reward, next_state, isDone):
@@ -155,7 +151,7 @@ class MintDQNAgent:
             print(mem_str.count(elem))
             print("\n")
         
-    def __replay(self, batch_size):
+    def __replay(self, session, batch_size):
         # key: some delay here
             
 #         print(self.memory[:,0])
@@ -185,7 +181,7 @@ class MintDQNAgent:
 #                 print('target predict after action:', target)
 #                 print('======')
 
-            self.model.train(state, target)
+            self.model.train(session, state, target)
         
         # update the epsilon to gradually reduce the random exploration
         if self.epsilon > self.epsilon_min:
@@ -199,7 +195,7 @@ class MintDQNAgent:
     ### end = datetime.datetime(2018,1,1,0)
     ### agent.train(end_time = end)
     
-    def train(self, end_time, num_episodes=100, start_time=None, verbose=True):
+    def train(self, session, end_time, num_episodes=100, start_time=None, verbose=True):
         self.cum_returns = []
         
         if start_time is None:
@@ -269,7 +265,7 @@ class MintDQNAgent:
              
             # train the Neural Network incrementally with the new experiences
             if len(self.memory) > self.batch_size:
-                self.__replay(self.batch_size)
+                self.__replay(session, self.batch_size)
                 
         self.target_model.save('{}.model.h5'.format(self.coin_name))
                 
