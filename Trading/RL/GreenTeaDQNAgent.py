@@ -321,78 +321,83 @@ class GreenTeaDQNAgent:
     ### agent.test(start_time = start)
     
     def test(self, session, start_time, end_time=None, epsilon=None, verbose=True, print_freq='daily'):
-        if epsilon is not None:
-            self.epsilon = epsilon
-        else:
-            self.epsilon = 0 # set to 0, no randomness allowed 
-        
-        self.env.reset()
-        self.env.set_current_time(start_time)
-        self.portfolio.reset()
-        state = self.env.getStatesSequence() + self.portfolio.getStates()
-        state -= self.state_mean
-#         self.model.load('{}.model.h5'.format(self.coin_name))
-        
-        self.test_cum_returns = []
-        self.test_portfolio_values = []
-        self.test_actions = []
-        
-        if end_time is None or end_time >= self.env.end_index:
-            end_time = self.env.end_index - self.env.time_delta
-        
-        n_days = (end_time - start_time) // (self.env.time_delta * 24)
-        print('Testing from ', start_time, ' to', end_time, ': ', '~', n_days, 'days\n')
-    
-        start_day = start_time.day
-        verbose_g = verbose
-    
-        while (True):
-            
-            if verbose:
-                if print_freq == 'hourly':
-                    print('Current time:', self.env.current_index)
-                    verbose = True
-                if print_freq == 'daily':
-                    if self.env.current_index.hour == 0:
-                        print('Current time:', self.env.current_index)
-                        verbose = True
-                    else:
-                        verbose = False
-                elif print_freq == 'weekly': 
-                    if self.env.current_index.day in np.roll((np.arange(28)+1), 28-start_day+1)[::7] and self.env.current_index.hour == 0:
-                        print('Current time:', self.env.current_index)
-                        verbose = True
-                    else:
-                        verbose = False
-            
-            action = self.__act(session, state)
-            isDone, next_state = self.env.step(end_time) # order changed
-            action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose)
-            
-            next_state = self.env.getStatesSequence()
-            next_state = next_state + self.portfolio.getStates()
-            state = next_state
-            state -= self.state_mean
-            
-            cum_return = self.portfolio.getReturnsPercent(self.env.getCurrentPrice())
-            self.test_cum_returns.append(cum_return)
-                
-            portfolio_value = self.portfolio.getCurrentValue(self.env.getCurrentPrice())
-            self.test_portfolio_values.append(portfolio_value)
-            
-            self.test_actions.append(action.value)
-            
-            verbose = verbose_g
-            
-            if isDone:
-                break
-        
-        ts = self.env.df.ix[start_time:end_time].index
-        self.test_cum_returns = pd.Series(self.test_cum_returns, index=ts)
-        self.test_portfolio_values = pd.Series(self.test_portfolio_values, index=ts)
-        self.test_actions = pd.Series(self.test_actions, index=ts)
+            if epsilon is not None:
+                self.epsilon = epsilon
+            else:
+                self.epsilon = 0.001 # set to 0, no randomness allowed 
 
-        print('Percentage return:', self.portfolio.getReturnsPercent(self.env.getCurrentPrice()))
+            self.env.reset()
+            self.env.set_current_time(start_time)
+            self.portfolio.reset()
+            state = self.env.getStatesSequence() + self.portfolio.getStates()
+            state -= self.state_mean
+    #         self.model.load('{}.model.h5'.format(self.coin_name))
+
+            self.test_cum_returns = []
+            self.test_portfolio_values = []
+            self.test_portfolio_values_cash = []
+            self.test_portfolio_values_coin = []
+            self.test_actions = []
+
+            if end_time is None or end_time >= self.env.end_index:
+                end_time = self.env.end_index - self.env.time_delta
+
+            n_days = (end_time - start_time) // (self.env.time_delta * 24)
+            print('Testing from ', start_time, ' to', end_time, ': ', '~', n_days, 'days\n')
+
+            start_day = start_time.day
+            verbose_g = verbose
+
+            while (True):
+
+                if verbose:
+                    if print_freq == 'hourly':
+                        print('Current time:', self.env.current_index)
+                        verbose = True
+                    if print_freq == 'daily':
+                        if self.env.current_index.hour == 0:
+                            print('Current time:', self.env.current_index)
+                            verbose = True
+                        else:
+                            verbose = False
+                    elif print_freq == 'weekly': 
+                        if self.env.current_index.day in np.roll((np.arange(28)+1), 28-start_day+1)[::7] and self.env.current_index.hour == 0:
+                            print('Current time:', self.env.current_index)
+                            verbose = True
+                        else:
+                            verbose = False
+
+
+                action = self.__act(session, state)
+                isDone, next_state = self.env.step(end_time) # order changed
+                action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose)
+
+                next_state = self.env.getStatesSequence()
+                next_state = next_state + self.portfolio.getStates()
+                state = next_state
+                state -= self.state_mean
+
+                cum_return = self.portfolio.getReturnsPercent(self.env.getCurrentPrice())
+                self.test_cum_returns.append(cum_return)
+
+                portfolio_value = self.portfolio.getCurrentValue(self.env.getCurrentPrice())
+                self.test_portfolio_values.append(portfolio_value)
+                self.test_portfolio_values_cash.append(self.portfolio.portfolio_cash)
+                self.test_portfolio_values_coin.append(self.portfolio.portfolio_coin * self.env.getCurrentPrice())
+
+                self.test_actions.append(action.value)
+
+                verbose = verbose_g
+
+                if isDone:
+                    break
+
+            ts = self.env.df.ix[start_time:end_time].index
+            self.test_cum_returns = pd.Series(self.test_cum_returns, index=ts)
+            self.test_portfolio_values = pd.Series(self.test_portfolio_values, index=ts)
+            self.test_actions = pd.Series(self.test_actions, index=ts)
+
+            print('Percentage return:', self.portfolio.getReturnsPercent(self.env.getCurrentPrice()))
         
     def plot_action(self, start_time, end_time=None):
         import matplotlib.pyplot as plt
