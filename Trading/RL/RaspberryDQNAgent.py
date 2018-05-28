@@ -147,7 +147,9 @@ class RaspberryDQNAgent:
         self.test_portfolio_values_coin = []
         self.test_actions = []
         
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.saver = tf.train.Saver(max_to_keep=2)
+        
      
     def plot_external_states(self):
         self.env.plot(self.external_states)
@@ -247,7 +249,7 @@ class RaspberryDQNAgent:
 #         print(state)
             
     # Agent Training    
-    def train(self, experiment_name, session, start_time, end_time, episode_len=100, num_episodes=100, verbose=True, auto_save_and_load=True):
+    def train(self, experiment_name, session, start_time, end_time, episode_len=100, num_episodes=100, verbose=True, auto_save_and_load=True, save_every=50):
         
         if auto_save_and_load:
             print('Auto loading is on, looking for saved checkpoints...')
@@ -256,9 +258,12 @@ class RaspberryDQNAgent:
             if ckpt and (tf.gfile.Exists(ckpt.model_checkpoint_path) or tf.gfile.Exists(v2_path)):
                 self.saver.restore(session, ckpt.model_checkpoint_path)
                 print("Start from saved checkpoint...")
+                current_episode = self.global_step.eval(session=session) + 1 # get last global_step
+                print("Start from iteration:", current_episode)
             else:
                 print('There is not saved parameters. Creating model with fresh parameters.')
                 session.run(tf.global_variables_initializer())
+                current_episode = 0
         else:
             print('Auto loading is off. Creating model with fresh parameters.')
             session.run(tf.global_variables_initializer())
@@ -271,7 +276,7 @@ class RaspberryDQNAgent:
         n_days = (end_time - start_time) // (self.env.time_delta * 24)
         print('Training, randomly selecting episodes from ', start_time, ' to', end_time, ': ', '~', n_days, 'days\n')
         
-        for i in range(num_episodes):
+        for i in range(current_episode, num_episodes):
             
             self.env.reset()
             self.portfolio.reset()
@@ -341,8 +346,9 @@ class RaspberryDQNAgent:
                           cum_return, 
                           self.epsilon))
             
-            if auto_save_and_load and (i+1) % 50 == 0:
-                path = self.saver.save(session, "./"+experiment_name+"/model.ckpt")
+            if auto_save_and_load and (i+1) % save_every == 0:
+                self.global_step.assign(i).eval(session=session)
+                path = self.saver.save(session, "./"+experiment_name+"/model.ckpt", global_step=self.global_step)
                 print('saved to ' + path)
                                 
     ### Sample Usage:
