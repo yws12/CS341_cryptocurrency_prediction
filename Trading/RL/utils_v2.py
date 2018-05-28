@@ -1,10 +1,10 @@
 '''
 utils_v2
-
-1. Added Environment.getStatesSequence().
-2. Changed external_state_list
-3. In __buy() and __sell(), changed amount of coins to buy/sell to be 1/10 of the maximum possible amount, and allowed non-integer.
+1. Include 3 additional internal states: "starting_cash", "steps_left_in_episode" and "last_buy_price". 
+2. Use spread = 0. 
+3. Use 'USDT_BTC_5min_mean' from 'df_hourly_BTC_trading_5min_mean.pickle' instead of 'USDT_BTC_open' for transactions. 
 '''
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,9 +20,10 @@ external_state_list = ['USDT_BTC_high', 'USDT_BTC_low', 'USDT_BTC_close', 'USDT_
            'USDT_BTC_volatility', 'USDT_BTC_pctChange', 'USDT_BTC_open_label', 'USDT_BTC_pctChange_label', 'USDT_BTC_volatility_label']
 
 # portfolio information 
-internal_state_list = ["coin", "cash", "total_value", "is_holding_coin", "return_since_entry"] 
+internal_state_list = ["coin", "cash", "total_value", "is_holding_coin", "return_since_entry", \
+                       "starting_cash", "steps_left_in_episode", "last_buy_price"] 
 
-spread = 0.68 / 100 # BTC spread
+spread = 0.0 / 100 # BTC spread
  
 def smooth(x,window_len=11,window='hanning'):
     """smooth the data using a window with requested size.
@@ -105,6 +106,7 @@ def plot_test(agent, test_history_list, idx, choice = 'bp'):
     df = df.loc[df.index >= start_time]
     df = df.loc[df.index <= end_time]
     prices = df['USDT_BTC_open']
+    #prices = df['USDT_BTC_5min_mean']
 #     print(prices.shape)
 #     print(smooth(prices))
 
@@ -233,7 +235,7 @@ def plot_test(agent, test_history_list, idx, choice = 'bp'):
 class Environment:
     def __init__(self, coin_name="BTC", states=external_state_list, recent_k = 0):
         dir_path = '../../Data/'
-        df = pd.read_pickle(dir_path+'df_hourly_BTC_with_labels.pickle')
+        df = pd.read_pickle(dir_path+'df_hourly_BTC_trading_5min_mean.pickle')
         self.df = df.dropna()
         self.length = len(self.df.index)
         self.current_index = self.df.index[0]
@@ -271,17 +273,17 @@ class Environment:
         self.current_index = current_time
         
     def getFinalPrice(self):
-        return self.df.iloc[self.length-1]['USDT_BTC_open'] 
+        return self.df.iloc[self.length-1]['USDT_BTC_5min_mean'] 
         
     def getCurrentPrice(self):
-        return self.df.loc[self.current_index]['USDT_BTC_open'] 
+        return self.df.loc[self.current_index]['USDT_BTC_5min_mean'] 
     
     def getPriceAt(self, index):
         if index < self.df.index[0]:
-            return self.df.iloc[0]['USDT_BTC_open']
+            return self.df.iloc[0]['USDT_BTC_5min_mean']
         if index >= self.df.index[self.length-1]:
             return self.getFinalPrice()
-        return self.df.loc[index]['USDT_BTC_open'] 
+        return self.df.loc[index]['USDT_BTC_5min_mean'] 
     
     
     def getReward(self, action):
@@ -334,6 +336,9 @@ class Portfolio:
         self.state_dict["total_value"] = self.portfolio_cash
         self.state_dict["is_holding_coin"] = 0
         self.state_dict["return_since_entry"] = 0
+        self.state_dict["starting_cash"] = self.starting_cash
+        self.state_dict["steps_left_in_episode"] = None
+        self.state_dict["last_buy_price"] = None
         
         self.bought_price = 0.0
         
@@ -356,14 +361,14 @@ class Portfolio:
         
     # apply action (buy, sell or hold) to the portfolio
     # update the internal state after the action
-    def apply_action(self, current_price, action, verbose):
+    def apply_action(self, current_price, action, verbose, xaction_fee=0.25/100):
         self.state_dict["total_value"] = self.getCurrentValue(current_price)
         if verbose:
             print("Action start:", action, ", Total value before action:", self.state_dict["total_value"])           
         
         if str(action) == 'Action.BUY':
             action = Action.BUY
-            coin_to_buy, buy_price = self.__buy(current_price, verbose)
+            coin_to_buy, buy_price = self.__buy(current_price, verbose, xaction_fee)
             if coin_to_buy > 0:
                 self.bought_price = buy_price               
             else:
@@ -371,7 +376,7 @@ class Portfolio:
                 
         elif str(action) == 'Action.SELL':
             action = Action.SELL
-            coin_to_sell, sell_price = self.__sell(current_price, verbose)
+            coin_to_sell, sell_price = self.__sell(current_price, verbose, xaction_fee)
             if coin_to_sell > 0:
                 pass
                 
@@ -391,7 +396,7 @@ class Portfolio:
             
         return action
     
-    def __buy(self, current_price, verbose):
+    def __buy(self, current_price, verbose, xaction_fee=0.25/100):
         if not current_price:
             return 0
         
@@ -406,16 +411,16 @@ class Portfolio:
             
         self.portfolio_coin += coin_to_buy
         self.portfolio_cash -= coin_to_buy * buy_price 
-        xaction_fee = coin_to_buy * buy_price * 0.25/100 # assume 0.25% transaction fees
-        self.portfolio_cash -= xaction_fee
+        fees = coin_to_buy * buy_price * xaction_fee # assume 0.25% transaction fees
+        self.portfolio_cash -= fees
         
         if verbose:
             print("After buying: coin bought:%.3f, transaction fees:%.3f, coin now:%.3f, cash now:%.3f" %(
-                coin_to_buy, xaction_fee, self.portfolio_coin, self.portfolio_cash))
+                coin_to_buy, fees, self.portfolio_coin, self.portfolio_cash))
         
         return coin_to_buy, buy_price
     
-    def __sell(self, current_price, verbose):
+    def __sell(self, current_price, verbose, xaction_fee=0.25/100):
         if not current_price:
             return 0
         
@@ -430,12 +435,12 @@ class Portfolio:
         
         self.portfolio_coin -= coin_to_sell
         self.portfolio_cash += coin_to_sell * sell_price
-        xaction_fee = coin_to_sell * sell_price * 0.25/100 # assume 0.25% transaction fees
-        self.portfolio_cash -= xaction_fee
+        fees = coin_to_sell * sell_price * xaction_fee # assume 0.25% transaction fees
+        self.portfolio_cash -= fees
         
         if verbose:
             print("After selling: coin sold:%.3f, transaction fees:%.3f, coin now:%.3f, cash now:%.3f" %(
-                coin_to_sell, xaction_fee, self.portfolio_coin, self.portfolio_cash))
+                coin_to_sell, fees, self.portfolio_coin, self.portfolio_cash))
         
         return coin_to_sell, sell_price
     
