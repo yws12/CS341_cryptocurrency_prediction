@@ -7,7 +7,7 @@ utils_v2
 '''
 import pandas as pd
 import numpy as np
-
+import matplotlib.pyplot as plt
 from enum import Enum
 class Action(Enum):
     SELL=0
@@ -23,10 +23,216 @@ external_state_list = ['USDT_BTC_high', 'USDT_BTC_low', 'USDT_BTC_close', 'USDT_
 internal_state_list = ["coin", "cash", "total_value", "is_holding_coin", "return_since_entry"] 
 
 spread = 0.68 / 100 # BTC spread
+ 
+def smooth(x,window_len=11,window='hanning'):
+    """smooth the data using a window with requested size.
+    
+    This method is based on the convolution of a scaled window with the signal.
+    The signal is prepared by introducing reflected copies of the signal 
+    (with the window size) in both ends so that transient parts are minimized
+    in the begining and end part of the output signal.
+    
+    input:
+        x: the input signal 
+        window_len: the dimension of the smoothing window; should be an odd integer
+        window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+            flat window will produce a moving average smoothing.
+
+    output:
+        the smoothed signal
+        
+    example:
+
+    t=linspace(-2,2,0.1)
+    x=sin(t)+randn(len(t))*0.1
+    y=smooth(x)
+    
+    see also: 
+    
+    numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+    scipy.signal.lfilter
+ 
+    TODO: the window parameter could be the window itself if an array instead of a string
+    NOTE: length(output) != length(input), to correct this: return y[(window_len/2-1):-(window_len/2)] instead of just y.
+    """
+
+    if x.ndim != 1:
+        raise ValueError("smooth only accepts 1 dimension arrays.")
+
+    if x.size < window_len:
+        raise ValueError ("Input vector needs to be bigger than window size.")
+
+
+    if window_len<3:
+        return x
+
+
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError ("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+
+
+    s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+    #print(len(s))
+    if window == 'flat': #moving average
+        w=numpy.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+
+    y=np.convolve(w/w.sum(),s,mode='valid')
+    return y
+
+
+'''
+idx : index of the episode in the test_history_list 
+choice:  'b' stands for baseline, currently not implemented yet.
+'p' stands for partition, whether to show coin and cash split or not
+'g' stands for good/bad choice.
+'''
+def plot_test(agent, test_history_list, idx, choice = 'bp'):
+    
+    start_time = test_history_list[idx][0].to_datetime()
+#     print(start_time) 
+    end_time = test_history_list[idx][1].to_datetime()
+    test_actions = test_history_list[idx][2]
+    test_cash_val = test_history_list[idx][3][0]
+    test_coin_val = test_history_list[idx][3][1]
+    test_portfolio_val = test_history_list[idx][3][2]
+
+    if end_time is None: # default: one day
+        end_time = agent.env.end_index
+        
+    df = agent.env.df
+    df = df.loc[df.index >= start_time]
+    df = df.loc[df.index <= end_time]
+    prices = df['USDT_BTC_open']
+#     print(prices.shape)
+#     print(smooth(prices))
+
+    ts = agent.env.df.ix[start_time:end_time].index
+    portfolio_values = pd.Series(test_portfolio_val, index=ts)
+    actions = pd.Series(test_actions, index=ts)
+
+    print(len(test_actions))
+    print(len(prices))
+    print(len(test_cash_val))
+
+#     actions = agent.test_actions
+#     actions = actions[actions.index >= start_time]
+#     actions = actions[actions.index < end_time]
+
+    fig, ax1 = plt.subplots(figsize = (15, 8))
+
+    ax1.plot(prices.index, prices, 'b-')
+    ax1.set_ylabel('Price', color='b', fontsize=15)
+    ax1.tick_params('y', colors='b', labelsize=15)
+
+    hold = actions[actions == 1]
+    buy = actions[actions == 2]
+    sell = actions[actions == 0]
+    
+#     print(len(hold))
+#     print(len(sell))
+
+
+    if 'g' in choice: 
+        sm =  smooth(prices,24)[12:len(prices.index)+12]
+        import numpy as np
+        from scipy.signal import argrelextrema
+
+        local_minima = argrelextrema(sm,np.less) 
+        local_maxima = argrelextrema(sm,np.greater)
+        turning = np.concatenate((local_minima[0],local_maxima[0]),axis=0)
+        turning = np.append(turning,0)
+        turning = np.append(turning,len(prices.index) - 1)
+        turning.sort()
+        sell_first = True
+        if (prices[0] < prices[1]):
+            sell_first = False
+        l_turning = list(turning)
+        edge = []
+        edge.append(0)
+        for i in range(len(l_turning) - 1):
+            edge.append((l_turning[i] + l_turning[i + 1])//2)
+        edge.append(len(prices.index) - 1)
+
+        good_action = []
+        good_action.append(1)
+        cur_action = 0 # sell
+        last_edge = 0
+        if (not sell_first):
+            cur_action = 2 # buy
+        for i in range(1,len(edge)):
+            target_edge = edge[i]
+            for j in np.arange(last_edge,target_edge,1):
+                good_action.append(cur_action)
+            cur_action = 2 - cur_action
+            last_edge = target_edge
+#         print(len(good_action))
+        good_action_df = pd.DataFrame()
+        good_action_df["good_action"] = good_action
+        good_action_df.index = actions.index
+
+
+
+
+        good_buy = actions[(actions == 2) & (actions == good_action)]
+        bad_buy = actions[(actions== 2) & (actions != good_action)]
+        good_sell = actions[(actions == 0) & (actions == good_action)]
+        bad_sell = actions[(actions== 0) & (actions != good_action)] 
+
+        ax2 = ax1.twinx()
+    #     print(hold)
+    #     print(actions)
+        if (len(hold) != 0):
+            ax2.scatter(hold.index, hold, c='blue', label='HOLD')
+        if (len(good_buy) != 0):
+            ax2.scatter(good_buy.index, good_buy, c='green', marker = 'o',label='GOOD_BUY')
+        if (len(bad_buy) != 0):    
+            ax2.scatter(bad_buy.index, bad_buy, c='red',marker = 'x', label='BAD_BUY')
+        if (len(good_sell) != 0):
+            ax2.scatter(good_sell.index, good_sell, c='green', marker = 'o', label='GOOD_SELL')
+        if (len(bad_sell) != 0):
+            ax2.scatter(bad_sell.index, bad_sell, c='red', marker = 'x', label='BAD_SELL')
+        ax2.set_yticks([])
+        ax2.legend(loc=1, fontsize=15)
+        
+    
+#     ax3 = ax1.twinx()
+#     ax3.plot(prices.index,sm, 'r-')
+#     ax3.tick_params('y_smooth', colors='r', labelsize=15)
+#     ax3.set_yticks([])
+
+    else:
+        ax2 = ax1.twinx()
+        if (len(hold)!=0):
+            ax2.scatter(hold.index, hold, c='blue', label='HOLD')
+        if (len(buy) != 0):
+            ax2.scatter(buy.index, buy, c='green', label='BUY')
+        if (len(sell) != 0):
+            ax2.scatter(sell.index, sell, c='red', label='SELL')
+        ax2.set_yticks([])
+        ax2.legend(loc=1, fontsize=15)
+
+    ax4 = ax1.twinx()
+#     ax4.set_ylim(0,6000)
+    if 'p' in choice:
+        ax4.plot(prices.index, test_cash_val, 'y', label='Cash Value')
+        ax4.plot(prices.index, test_coin_val, 'orange', label='Coin Value in USD')
+    ax4.plot(prices.index, portfolio_values ,'purple',label='Portfolio Value in USD')
+#     if 'b' in choice:
+#         ax4.plot(prices.index,agent.baseline_portfolio_values,'red',label = 'Baseline Portfolio Value')
+    ax4.legend(loc=4, fontsize=15)
+
+    plt.xlim(actions.index[0], actions.index[-1])       
+
+    plt.show()
+
+
+    
     
 class Environment:
     def __init__(self, coin_name="BTC", states=external_state_list, recent_k = 0):
-        dir_path = '../../'
+        dir_path = '../../Data/'
         df = pd.read_pickle(dir_path+'df_hourly_BTC_with_labels.pickle')
         self.df = df.dropna()
         self.length = len(self.df.index)
