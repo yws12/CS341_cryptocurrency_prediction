@@ -160,7 +160,14 @@ class CranberryDQNAgent:
         if np.random.rand() < self.epsilon:
             return random.choice(list(Action))
         act_values = self.model.predict(session, state)
-        return Action(np.argmax(act_values[0]))
+        action_intended = Action(np.argmax(act_values[0]))
+        L = np.argsort(-act_values[0])
+        if str(action_intended) == 'Action.SELL' and self.portfolio.portfolio_coin == 0:
+            return Action(L[1])
+        elif str(action_intended) == 'Action.BUY' and self.portfolio.portfolio_cash == 0:
+            return Action(L[1])
+        else:
+            return action_intended
         
     def __update_target_model(self, sess):
         with tf.variable_scope("target_model", initializer=tf.contrib.layers.xavier_initializer()) as scope:
@@ -345,7 +352,7 @@ class CranberryDQNAgent:
                 self.preprocess(next_state, episode_beginning_price)
                 
                 if verbose:
-                    print(action, v_t)
+                    print(action_applied, v_t)
                     print()
                 
                 self.memory.append([state, action, next_state, is_last_step, v_t, v_t_plus1])
@@ -413,15 +420,15 @@ class CranberryDQNAgent:
                 self.env.set_current_time(episode_start_time)
                 episode_beginning_price = self.env.getCurrentPrice() # needed for normalizing state features
 
+                self.portfolio.state_dict["steps_left_in_episode"] = episode_len - 1
+                self.portfolio.state_dict["last_buy_price"] = episode_beginning_price
+
                 state = self.env.getStatesSequence(self.seq_len) + self.portfolio.getStates() # list
                 self.preprocess(state, episode_beginning_price) # normalize price features
 
                 # walk through A RANDOM SEQUENCE OF HOURS (an episode)
                 # obtain action based on state values using the Neural Network model
                 # remember episode history
-                state = self.env.getStatesSequence() + self.portfolio.getStates()
-                self.preprocess(state, episode_beginning_price)
-
                 start_day = episode_start_time.day
                 verbose_g = verbose
 
@@ -429,6 +436,9 @@ class CranberryDQNAgent:
                 episode_ptfl_history_cashval = []
                 episode_ptfl_history_coinval = []
                 episode_ptfl_history_totalval = []
+                
+                self.portfolio.state_dict["steps_left_in_episode"] = episode_len - 1
+                self.portfolio.state_dict["last_buy_price"] = episode_beginning_price
                 
                 while (True): # while not end of episode
 
@@ -454,6 +464,11 @@ class CranberryDQNAgent:
                     action = self.__act(session, state)
                     isDone, next_state = self.env.step(episode_end_time) # order changed, and it's episode end time
                     action = self.portfolio.apply_action(self.env.getCurrentPrice(), action, verbose, xaction_fee)
+                    
+                    if str(action) == 'Action.BUY':
+                        self.portfolio.state_dict["last_buy_price"] = self.env.getCurrentPrice()
+                        
+                    self.portfolio.state_dict["steps_left_in_episode"] -= 1
 
                     next_state = self.env.getStatesSequence(self.seq_len) + self.portfolio.getStates()
                     self.preprocess(next_state, episode_beginning_price)
