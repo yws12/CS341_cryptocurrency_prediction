@@ -44,7 +44,7 @@ elif mode == 'cheating':
 elif mode == 'test':
     test_start = datetime.datetime(2018,2,1,0)
     test_end = datetime.datetime(2018,4,1,0)
-    history_list = agent.test(sess, start_time = test_start, end_time = test_end, verbose=False)
+    history_list = agent.test(sess, start_time = test_start, end_time = test_end, episode_len=20, verbose=False)
     print('Test finished.')
 
 else:

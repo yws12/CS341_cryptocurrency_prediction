@@ -431,7 +431,7 @@ class CherryDQNAgent:
             if (i+1) % test_every == 0:
                 test_start = datetime.datetime(2018,2,1,0)
                 test_end = datetime.datetime(2018,4,1,0)
-                _ = self.test(session, start_time = test_start, end_time = test_end, verbose=False)
+                _ = self.test(session, start_time = test_start, end_time = test_end, episode_len=20, verbose=False)
                                 
     ### Sample Usage:
         
@@ -439,7 +439,7 @@ class CherryDQNAgent:
     ### start = datetime.datetime(2018,1,1,0)
     ### agent.test(start_time = start)
     
-    def test(self, session, start_time, end_time=None, episode_len = 100, verbose=True, print_freq='daily', xaction_fee=0.25/100):
+    def test(self, session, start_time, end_time=None, episode_len = 20, verbose=True, print_freq='daily', xaction_fee=0.25/100):
             print('Testing, setting epsilon to zero...')
             epsilon_temp = self.epsilon
             self.epsilon = 0.000001
