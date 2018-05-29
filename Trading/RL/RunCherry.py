@@ -33,7 +33,7 @@ print('experiment_name=', experiment_name)
 if mode == 'train':
     agent.train(experiment_name=experiment_name, session=sess, start_time = train_start, \
             end_time = train_end, num_episodes=1000000, episode_len=20, \
-            verbose=False, auto_save_and_load=True, save_every=50, reward_func='Andy') 
+            verbose=False, auto_save_and_load=True, save_every=50, test_every=50, reward_func='Andy') 
 
 elif mode == 'cheating':
     test_start = datetime.datetime(2017,1,1,0)

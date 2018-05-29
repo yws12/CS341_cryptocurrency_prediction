@@ -287,7 +287,7 @@ class CherryDQNAgent:
         state[-1] /= episode_beginning_price # normalize last_buy_price 
             
     # Agent Training    
-    def train(self, experiment_name, session, start_time=datetime.datetime(2017,1,1,0), end_time=datetime.datetime(2018,2,1,0), episode_len=100, num_episodes=100, verbose=True, auto_save_and_load=True, save_every=50, reward_func='Andy'):
+    def train(self, experiment_name, session, start_time=datetime.datetime(2017,1,1,0), end_time=datetime.datetime(2018,2,1,0), episode_len=100, num_episodes=100, verbose=True, auto_save_and_load=True, save_every=50, test_every=1000, reward_func='Andy'):
         
         if auto_save_and_load:
             print('Auto loading is on, looking for saved checkpoints...')
@@ -427,6 +427,11 @@ class CherryDQNAgent:
                 self.global_step.assign(i).eval(session=session)
                 path = self.saver.save(session, "./"+experiment_name+"/model.ckpt", global_step=self.global_step)
                 print('saved to ' + path)
+                
+            if (i+1) % test_every == 0:
+                test_start = datetime.datetime(2018,2,1,0)
+                test_end = datetime.datetime(2018,4,1,0)
+                _ = self.test(session, start_time = test_start, end_time = test_end, verbose=False)
                                 
     ### Sample Usage:
         
@@ -436,6 +441,7 @@ class CherryDQNAgent:
     
     def test(self, session, start_time, end_time=None, episode_len = 100, verbose=True, print_freq='daily', xaction_fee=0.25/100):
             print('Testing, setting epsilon to zero...')
+            epsilon_temp = self.epsilon
             self.epsilon = 0.000001
             
             if end_time is None or end_time >= self.env.end_index:
@@ -540,6 +546,7 @@ class CherryDQNAgent:
                 # end for each episode
             
             print('Average percentage return over all tests:', np.mean(pct_return_list))
+            self.epsilon = epsilon_temp
             return test_history_list
         
     def plot_action(self, start_time, end_time=None):
