@@ -4,6 +4,10 @@ Cherry:
 2. epsilon_decay defaults to 0.996
 3. In train(), default start_time=datetime.datetime(2017,1,1,0), end_time=datetime.datetime(2018,2,1,0)
 4. Choose memory_system on initialization.
+
+5. Use sorted list instead of heapq
+6. Changed max_mem_len to 10000, batch_size=100
+7. self.test_return_list stores avg return of each test 
 '''
 
 from importlib import reload
@@ -16,7 +20,7 @@ import tensorflow as tf
 import random
 import numpy as np
 # from collections import deque
-import heapq
+# import heapq
 import pandas as pd
 
 import datetime
@@ -107,10 +111,10 @@ class CherryDQNAgent:
         
         self.initial_total_value = initial_total_value
         
-        self.max_mem_len = 100000
+        self.max_mem_len = 10000
         self.memory = [] 
         
-        self.batch_size = 50
+        self.batch_size = 100
         self.gamma = gamma
         self.epsilon=1.0
         self.epsilon_min=epsilon_min 
@@ -156,10 +160,11 @@ class CherryDQNAgent:
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.saver = tf.train.Saver(max_to_keep=2)
         
-        self.sample_prob_list = np.arange(self.max_mem_len)**0.2
+        self.sample_prob_list = np.arange(self.max_mem_len)**0.4
         self.sample_prob_list = self.sample_prob_list / np.sum(self.sample_prob_list)
         
         self.memory_system = memory_system
+        self.test_return_list = []
         
      
     def plot_external_states(self):
@@ -282,9 +287,12 @@ class CherryDQNAgent:
 
     def preprocess(self, state, episode_beginning_price): 
         # Andy said normalizing price such that price at the beginning of an episode is 1
-        for step in range( (len(state)-len(internal_state_list))//len(external_state_list) ):
-            state[step*len(external_state_list):step*len(external_state_list)+5] /= episode_beginning_price
-        state[-1] /= episode_beginning_price # normalize last_buy_price 
+        # for step in range( (len(state)-len(internal_state_list))//len(external_state_list) ):
+        #     state[step*len(external_state_list):step*len(external_state_list)+5] /= episode_beginning_price
+        # state[-1] /= episode_beginning_price # normalize last_buy_price 
+        for i in range(len(state)):
+            if state[i] > 500:
+                state[i] /= episode_beginning_price
             
     # Agent Training    
     def train(self, experiment_name, session, start_time=datetime.datetime(2017,1,1,0), end_time=datetime.datetime(2018,2,1,0), episode_len=100, num_episodes=100, verbose=True, auto_save_and_load=True, save_every=50, test_every=1000, reward_func='Andy'):
@@ -392,14 +400,16 @@ class CherryDQNAgent:
             
             if self.memory_system == 'abs_reward_priority':
                 for record in temp_memory:
-                    heapq.heappush(self.memory, (abs(ep_reward), record)) # differs from the first Blackberry
+                    self.memory.append((abs(ep_reward), record)) # differs from the first Blackberry
+                self.memory = sorted(self.memory)
                 while len(self.memory) > self.max_mem_len:
-                    heapq.heappop(self.memory)
+                    self.memory.pop(0)
             elif self.memory_system == 'reward_priority':
                 for record in temp_memory:
-                    heapq.heappush(self.memory, (ep_reward, record))
+                    self.memory.append((ep_reward, record))
+                self.memory = sorted(self.memory)
                 while len(self.memory) > self.max_mem_len:
-                    heapq.heappop(self.memory) 
+                    self.memory.pop(0)
             elif self.memory_system == 'long_deque':
                 for record in temp_memory:
                     self.memory.append((0, record))
@@ -545,7 +555,9 @@ class CherryDQNAgent:
                                          [episode_ptfl_history_cashval, episode_ptfl_history_coinval, episode_ptfl_history_totalval] ])
                 # end for each episode
             
-            print('Average percentage return over all tests:', np.mean(pct_return_list))
+            avg_return = np.mean(pct_return_list)
+            print('Average percentage return over all tests:', avg_return)
+            self.test_return_list.append(avg_return)
             self.epsilon = epsilon_temp
             return test_history_list
         
