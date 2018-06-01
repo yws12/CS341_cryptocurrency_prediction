@@ -1,8 +1,6 @@
 '''
-utils_v2
-1. Include 3 additional internal states: "starting_cash", "steps_left_in_episode" and "last_buy_price". 
-2. Use spread = 0. 
-3. Use 'USDT_BTC_5min_mean' from 'df_hourly_BTC_trading_5min_mean.pickle' instead of 'USDT_BTC_open' for transactions. 
+utils_v3
+1. new plot style
 '''
 
 import pandas as pd
@@ -82,22 +80,32 @@ def smooth(x,window_len=11,window='hanning'):
     y=np.convolve(w/w.sum(),s,mode='valid')
     return y
 
-
 '''
 idx : index of the episode in the test_history_list 
 choice:  'b' stands for baseline, currently not implemented yet.
 'p' stands for partition, whether to show coin and cash split or not
 'g' stands for good/bad choice.
 '''
+
+def make_patch_spines_invisible(ax):
+    ax.set_frame_on(True)
+    ax.patch.set_visible(False)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+
 def plot_test(agent, test_history_list, idx, choice = 'bp'):
     
+    plt.style.use('seaborn-whitegrid') # style
+    
     start_time = test_history_list[idx][0].to_datetime()
-#     print(start_time) 
     end_time = test_history_list[idx][1].to_datetime()
     test_actions = test_history_list[idx][2]
     test_cash_val = test_history_list[idx][3][0]
     test_coin_val = test_history_list[idx][3][1]
     test_portfolio_val = test_history_list[idx][3][2]
+    
+    test_portfolio_val_t0 = test_history_list[idx][3][2][0] # initial portfolio value
+    test_portfolio_pct = test_portfolio_val/test_portfolio_val_t0 - 1 # percentage of return
 
     if end_time is None: # default: one day
         end_time = agent.env.end_index
@@ -107,8 +115,6 @@ def plot_test(agent, test_history_list, idx, choice = 'bp'):
     df = df.loc[df.index <= end_time]
     prices = df['USDT_BTC_open']
     #prices = df['USDT_BTC_5min_mean']
-#     print(prices.shape)
-#     print(smooth(prices))
 
     ts = agent.env.df.ix[start_time:end_time].index
     portfolio_values = pd.Series(test_portfolio_val, index=ts)
@@ -118,23 +124,32 @@ def plot_test(agent, test_history_list, idx, choice = 'bp'):
     print(len(prices))
     print(len(test_cash_val))
 
-#     actions = agent.test_actions
-#     actions = actions[actions.index >= start_time]
-#     actions = actions[actions.index < end_time]
-
-    fig, ax1 = plt.subplots(figsize = (15, 8))
-
-    ax1.plot(prices.index, prices, 'b-')
-    ax1.set_ylabel('Price', color='b', fontsize=15)
-    ax1.tick_params('y', colors='b', labelsize=15)
+    fig, ax0 = plt.subplots(figsize = (15, 8))
+    
+    if 'p' in choice:
+        
+        barwidth = 0.024
+        alpha = 1
+        ax0.bar(prices.index , test_cash_val, label='Cash Value', 
+                color='#FFD54F', edgecolor='black', width=barwidth, alpha=alpha) # orange          
+        ax0.bar(prices.index, test_coin_val, label='Coin Value', bottom=test_cash_val, 
+                color='#FFF9C4', edgecolor='black', width=barwidth,  alpha=alpha) # yellow
+        ax0.set_ylim(ymax=7000)
+    ax0.tick_params('y', labelsize=20)
+    legend = ax0.legend(loc=4, fontsize=20, frameon=True, framealpha=1)
+    frame = legend.get_frame()
+    frame.set_color('white')
+    
+    ax1 = ax0.twinx()
+    ax1.plot(prices.index, prices, 'b:', linewidth=3.5, marker='o', markersize=7)
+    ax1.set_ylabel('Price', color='b', fontsize=23, rotation=60)
+    ax1.tick_params('x', labelsize=15)
+    ax1.tick_params('y', colors='b', labelsize=20)
+    ax1.grid(False)
 
     hold = actions[actions == 1]
     buy = actions[actions == 2]
     sell = actions[actions == 0]
-    
-#     print(len(hold))
-#     print(len(sell))
-
 
     if 'g' in choice: 
         sm =  smooth(prices,24)[12:len(prices.index)+12]
@@ -169,22 +184,16 @@ def plot_test(agent, test_history_list, idx, choice = 'bp'):
                 good_action.append(cur_action)
             cur_action = 2 - cur_action
             last_edge = target_edge
-#         print(len(good_action))
         good_action_df = pd.DataFrame()
         good_action_df["good_action"] = good_action
         good_action_df.index = actions.index
-
-
-
 
         good_buy = actions[(actions == 2) & (actions == good_action)]
         bad_buy = actions[(actions== 2) & (actions != good_action)]
         good_sell = actions[(actions == 0) & (actions == good_action)]
         bad_sell = actions[(actions== 0) & (actions != good_action)] 
 
-        ax2 = ax1.twinx()
-    #     print(hold)
-    #     print(actions)
+        ax2 = ax0.twinx()
         if (len(hold) != 0):
             ax2.scatter(hold.index, hold, c='blue', label='HOLD')
         if (len(good_buy) != 0):
@@ -196,40 +205,39 @@ def plot_test(agent, test_history_list, idx, choice = 'bp'):
         if (len(bad_sell) != 0):
             ax2.scatter(bad_sell.index, bad_sell, c='red', marker = 'x', label='BAD_SELL')
         ax2.set_yticks([])
-        ax2.legend(loc=1, fontsize=15)
-        
-    
-#     ax3 = ax1.twinx()
-#     ax3.plot(prices.index,sm, 'r-')
-#     ax3.tick_params('y_smooth', colors='r', labelsize=15)
-#     ax3.set_yticks([])
+        ax2.legend(loc=1, frameon=True, framealpha=1)
+        ax2.grid(False)
 
     else:
-        ax2 = ax1.twinx()
+        ax2 = ax0.twinx()
         if (len(hold)!=0):
-            ax2.scatter(hold.index, hold, c='blue', label='HOLD')
+            ax2.scatter(hold.index, hold, c='blue', marker='>', s=220, label='HOLD')
         if (len(buy) != 0):
-            ax2.scatter(buy.index, buy, c='green', label='BUY')
+            ax2.scatter(buy.index, buy, c='green', marker='P', s=220, label='BUY')
         if (len(sell) != 0):
-            ax2.scatter(sell.index, sell, c='red', label='SELL')
+            ax2.scatter(sell.index, sell, c='red', marker='X', s=220, label='SELL')
         ax2.set_yticks([])
-        ax2.legend(loc=1, fontsize=15)
-
-    ax4 = ax1.twinx()
-#     ax4.set_ylim(0,6000)
-    if 'p' in choice:
-        ax4.plot(prices.index, test_cash_val, 'y', label='Cash Value')
-        ax4.plot(prices.index, test_coin_val, 'orange', label='Coin Value in USD')
-    ax4.plot(prices.index, portfolio_values ,'purple',label='Portfolio Value in USD')
-#     if 'b' in choice:
-#         ax4.plot(prices.index,agent.baseline_portfolio_values,'red',label = 'Baseline Portfolio Value')
-    ax4.legend(loc=4, fontsize=15)
-
+        legend = ax2.legend(loc=1, fontsize=20, frameon=True, framealpha=1)
+        frame = legend.get_frame()
+        frame.set_color('white')
+    
+    ax3 = ax0.twinx()
+    ax3.spines["right"].set_position(("axes", 1.12))
+    # Having been created by twinx, ax3 has its frame off,
+    #, so the line of its detached spine is invisible.  
+    # First, activate the frame but make the patch and spines invisible.
+    make_patch_spines_invisible(ax3)
+    # Second, show the right spine.
+    ax3.spines["right"].set_visible(True)
+    ax3.plot(prices.index, test_portfolio_pct, 
+             color='#6C3483', linestyle='--', linewidth=2.5, marker='D', markersize=7) # purple
+    ax3.set_ylabel('% return', color='#6C3483', fontsize=23, rotation=60)
+    ax3.tick_params('y', colors='#6C3483', labelsize=20)
+    ax3.grid(False)
+    
     plt.xlim(actions.index[0], actions.index[-1])       
 
     plt.show()
-
-
     
     
 class Environment:
